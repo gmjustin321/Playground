@@ -1,0 +1,3 @@
+# Static site with no build step: Netlify serves index.html from this folder.
+[build]
+  publish = "."
