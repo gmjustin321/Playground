@@ -1,0 +1,1940 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>20-Year Bankroll Simulator</title>
+<meta name="description" content="Project a trading bankroll up to 20 years out from trades per day, win rate, average win and loss, and position size, across 1,000 simulated runs.">
+<meta property="og:title" content="20-Year Bankroll Simulator">
+<meta property="og:description" content="Project a trading bankroll up to 20 years out from trades per day, win rate, average win and loss, and position size, across 1,000 simulated runs.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#fbfcfd" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12151b" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Cpath d='M7 22.5l6-6.5 4.5 4 7.5-9' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500;600&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a trade-ticket column of inputs beside a log-scale fan chart of 20 years of outcomes.
+   On phones the chart pins to the top of the screen while the ticket scrolls beneath it. */
+:root {
+  color-scheme: light;
+  --bg: #fbfcfd;
+  --panel: #eff2f6;
+  --ink: #0f1420;
+  --ink-2: #4a5365;
+  --muted: #5f697c;
+  --rule: #e1e5ec;
+  --axis: #c2c8d2;
+  --accent: #2a78d6;
+  --accent-ink: #1c5cab;
+  --fan-outer: rgba(42, 120, 214, 0.11);
+  --fan-inner: rgba(42, 120, 214, 0.22);
+  --run: #eb6834;
+  --ev: #6b7486;
+  --gain: #006300;
+  --loss: #b42318;
+  --warn-bg: #fdf1e7;
+  --warn-ink: #8a3a0c;
+  --crit-bg: #fcebea;
+  --crit-ink: #9b1c14;
+  --thumb: #ffffff;
+  --shadow: rgba(15, 20, 32, 0.14);
+  --font-ui: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-data: "Azeret Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151b;
+    --panel: #1a1f28;
+    --ink: #edf0f5;
+    --ink-2: #b4bccb;
+    --muted: #8d95a5;
+    --rule: #262c37;
+    --axis: #3a4252;
+    --accent: #3987e5;
+    --accent-ink: #7fb0f0;
+    --fan-outer: rgba(57, 135, 229, 0.15);
+    --fan-inner: rgba(57, 135, 229, 0.30);
+    --run: #d95926;
+    --ev: #9aa2b1;
+    --gain: #2fb52f;
+    --loss: #f07a72;
+    --warn-bg: #2b1d12;
+    --warn-ink: #f2a77e;
+    --crit-bg: #2e1514;
+    --crit-ink: #f59a92;
+    --thumb: #edf0f5;
+    --shadow: rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151b;
+  --panel: #1a1f28;
+  --ink: #edf0f5;
+  --ink-2: #b4bccb;
+  --muted: #8d95a5;
+  --rule: #262c37;
+  --axis: #3a4252;
+  --accent: #3987e5;
+  --accent-ink: #7fb0f0;
+  --fan-outer: rgba(57, 135, 229, 0.15);
+  --fan-inner: rgba(57, 135, 229, 0.30);
+  --run: #d95926;
+  --ev: #9aa2b1;
+  --gain: #2fb52f;
+  --loss: #f07a72;
+  --warn-bg: #2b1d12;
+  --warn-ink: #f2a77e;
+  --crit-bg: #2e1514;
+  --crit-ink: #f59a92;
+  --thumb: #edf0f5;
+  --shadow: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  height: env(safe-area-inset-top, 0px);
+  z-index: 10;
+  background: var(--bg);
+}
+button { font: inherit; color: inherit; }
+sup { font-size: 0.58em; line-height: 0; vertical-align: super; margin-left: 0.04em; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 22px 56px;
+}
+
+/* ---------- masthead ---------- */
+.masthead { display: grid; gap: 6px; padding-bottom: 14px; }
+.masthead h1 {
+  margin: 0;
+  font-size: clamp(25px, 6.2vw, 38px);
+  line-height: 1.06;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.dek { margin: 0; color: var(--ink-2); max-width: 66ch; text-wrap: pretty; }
+
+.eyebrow {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---------- workbench ---------- */
+.workbench { display: grid; gap: 18px; }
+.viz { display: grid; gap: 8px; min-width: 0; }
+
+.readout { display: grid; gap: 2px; min-width: 0; }
+.ro-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.ro-date { font-family: var(--font-data); font-size: 12px; color: var(--ink-2); }
+.hero-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.hero {
+  font-size: clamp(32px, 9.4vw, 54px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+}
+.mult {
+  font-family: var(--font-data);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.mult.gain { color: var(--gain); }
+.mult.loss { color: var(--loss); }
+.ro-series { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 13px; color: var(--ink-2); min-height: 19px; }
+.ro-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.ro-item b { color: var(--ink); font-weight: 600; }
+
+.key { display: inline-block; flex: none; width: 12px; height: 0; border-top: 2px solid var(--accent); border-radius: 1px; }
+.key.run { border-top-color: var(--run); }
+.key.ev { border-top: 2px dashed var(--ev); }
+.key.fan {
+  height: 10px;
+  border: 0;
+  border-radius: 2px;
+  background: linear-gradient(var(--fan-outer) 0 24%, var(--fan-inner) 24% 76%, var(--fan-outer) 76% 100%);
+  box-shadow: inset 0 0 0 1px var(--fan-inner);
+}
+
+.chart-wrap { position: relative; height: 260px; min-width: 0; }
+#chart {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: pan-y;
+  cursor: crosshair;
+  -webkit-user-select: none;
+  user-select: none;
+  border-radius: 6px;
+}
+#chart:focus { outline: none; }
+#chart:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.gl { stroke: var(--rule); stroke-width: 1; shape-rendering: crispEdges; }
+.baseline { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
+.xt { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
+.axis-text { fill: var(--muted); font-family: var(--font-data); font-size: 10.5px; }
+.start-ref { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.75; shape-rendering: crispEdges; }
+.chart-label {
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 600;
+  fill: var(--ink-2);
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.chart-label.quiet { font-weight: 500; fill: var(--muted); }
+.fan-outer { fill: var(--fan-outer); }
+.fan-inner { fill: var(--fan-inner); }
+.s-median { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.s-run { fill: none; stroke: var(--run); stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; }
+.s-ev { fill: none; stroke: var(--ev); stroke-width: 1.6; stroke-dasharray: 5 4; stroke-linecap: round; }
+.dot { stroke: var(--bg); stroke-width: 2; }
+.dot.median { fill: var(--accent); }
+.dot.run { fill: var(--run); }
+.dot.ev { fill: var(--ev); }
+.cross-line { stroke: var(--ink-2); stroke-width: 1; opacity: 0.55; shape-rendering: crispEdges; }
+
+.scale-btn {
+  position: absolute;
+  top: 14px;
+  left: 60px;
+  font-family: var(--font-data);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  min-height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+}
+.scale-btn[aria-pressed="true"] { color: var(--accent-ink); border-color: var(--accent); }
+.scale-btn:hover { background: var(--panel); }
+
+.legend {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 1px;
+}
+.legend::-webkit-scrollbar { display: none; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 4px 7px;
+  min-height: 30px;
+  cursor: pointer;
+}
+.chip:hover { background: var(--panel); }
+.chip[aria-pressed="false"] { color: var(--muted); }
+.chip[aria-pressed="false"] .key { opacity: 0.35; }
+.chip.icon { padding: 4px 6px; color: var(--ink-2); }
+.chip-pair { display: inline-flex; gap: 3px; flex: none; }
+.chip[hidden], .chip-pair[hidden] { display: none !important; }
+
+/* ---------- ticket ---------- */
+.ticket {
+  background: var(--panel);
+  border-radius: 16px;
+  padding: 16px 16px 8px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.ticket-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.ticket h2 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.ticket-note { margin: 0 0 10px; font-size: 13px; color: var(--ink-2); }
+.text-btn {
+  border: 0;
+  background: transparent;
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 2px;
+  cursor: pointer;
+}
+.text-btn:hover { text-decoration: underline; }
+
+.group {
+  border-top: 1px solid var(--rule);
+  padding: 14px 0 12px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.group-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.group-sub { margin: -6px 0 0; font-size: 12.5px; color: var(--muted); }
+.fields { display: grid; gap: 12px; }
+
+.field { display: grid; gap: 2px; }
+.field-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.field label { font-size: 14.5px; font-weight: 500; }
+.num {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 2px 4px;
+  border-bottom: 1px solid var(--axis);
+  font-family: var(--font-data);
+  font-size: 15px;
+  min-width: 0;
+  max-width: 62%;
+}
+.num:focus-within { border-bottom-color: var(--accent); box-shadow: 0 1px 0 0 var(--accent); }
+.num input {
+  font: inherit;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: right;
+  outline: none;
+  min-width: 0;
+}
+.affix { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+
+input[type="range"] {
+  --a: 0%;
+  --b: 50%;
+  --fillc: var(--accent);
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 30px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+input[type="range"]:focus { outline: none; }
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--axis) 0 var(--a), var(--fillc) var(--a) var(--b), var(--axis) var(--b) 100%);
+}
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--axis) 0 var(--a), var(--fillc) var(--a) var(--b), var(--axis) var(--b) 100%);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -9px;
+  border-radius: 50%;
+  background: var(--thumb);
+  border: 2px solid var(--fillc);
+  box-shadow: 0 1px 3px var(--shadow);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--thumb);
+  border: 2px solid var(--fillc);
+  box-shadow: 0 1px 3px var(--shadow);
+}
+input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--fan-inner), 0 1px 3px var(--shadow); }
+input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(--fan-inner), 0 1px 3px var(--shadow); }
+input[type="range"].gain { --fillc: var(--gain); }
+input[type="range"].loss { --fillc: var(--loss); }
+
+.calc { margin: 0; font-size: 12.5px; color: var(--muted); }
+.calc b { color: var(--ink-2); font-weight: 600; }
+.calc .gain, .tile-value.gain { color: var(--gain); }
+.calc .loss, .tile-value.loss { color: var(--loss); }
+
+.switch { display: flex; align-items: center; gap: 10px; min-height: 30px; font-size: 14.5px; cursor: pointer; width: fit-content; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.switch .track {
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--axis);
+  transition: background 0.15s ease;
+}
+.switch .track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--thumb);
+  box-shadow: 0 1px 2px var(--shadow);
+  transition: transform 0.15s ease;
+}
+.switch input:checked + .track { background: var(--accent); }
+.switch input:checked + .track::after { transform: translateX(16px); }
+.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+}
+.seg button {
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 4px 11px;
+  min-height: 28px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); font-weight: 600; }
+
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.note svg { flex: none; margin-top: 2px; }
+.note.warn { background: var(--warn-bg); color: var(--warn-ink); }
+.note.crit { background: var(--crit-bg); color: var(--crit-ink); }
+
+details.cap > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  min-height: 26px;
+}
+details.cap > summary::-webkit-details-marker { display: none; }
+details.cap > summary .cap-state { font-family: var(--font-data); font-size: 12.5px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 8px; }
+details.cap > summary .cap-state::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.15s ease;
+}
+details.cap[open] > summary .cap-state::after { transform: rotate(225deg) translateY(-1px); }
+details.cap:not([open]) { gap: 0; }
+.cap-fields.off .field { opacity: 0.55; }
+.hint { margin: 0; font-size: 12.5px; color: var(--ink-2); }
+
+/* ---------- key numbers ---------- */
+.math { margin-top: 30px; display: grid; gap: 12px; }
+.math h2, .notes h2 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.tile { background: var(--bg); padding: 12px 14px 14px; display: grid; gap: 3px; align-content: start; min-width: 0; }
+.tile-label { font-size: 12.5px; color: var(--muted); }
+.tile-value { font-size: 22px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.2; overflow-wrap: anywhere; }
+.tile-sub { font-size: 12.5px; color: var(--ink-2); line-height: 1.35; }
+
+/* ---------- notes + table ---------- */
+.notes { margin-top: 30px; display: grid; gap: 10px; }
+.notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--ink-2); max-width: 70ch; }
+.table-view { margin-top: 6px; border-top: 1px solid var(--rule); padding-top: 12px; }
+.table-view summary { cursor: pointer; font-weight: 600; width: fit-content; }
+.table-scroll { overflow-x: auto; margin-top: 10px; }
+.table-scroll table { border-collapse: collapse; min-width: 100%; font-family: var(--font-data); font-size: 12.5px; }
+.table-scroll th, .table-scroll td { padding: 7px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+.table-scroll th:first-child, .table-scroll td:first-child { text-align: left; padding-left: 0; }
+.table-scroll th { font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--muted); }
+
+/* ---------- responsive ---------- */
+@media (max-width: 899px) and (min-height: 620px) {
+  .viz {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 5;
+    background: var(--bg);
+    margin-left: calc(-1 * max(16px, env(safe-area-inset-left, 0px)));
+    margin-right: calc(-1 * max(16px, env(safe-area-inset-right, 0px)));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 10px 9px;
+    border-bottom: 1px solid var(--rule);
+    gap: 6px;
+  }
+  .chart-wrap { height: clamp(160px, 26vh, 230px); height: clamp(160px, 26svh, 230px); }
+  .hero { font-size: clamp(30px, 8.6vw, 44px); }
+}
+@media (min-width: 760px) {
+  .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 900px) {
+  .page { padding-block: 34px 72px; }
+  .masthead { padding-bottom: 22px; }
+  .workbench { grid-template-columns: minmax(320px, 370px) minmax(0, 1fr); gap: 32px; align-items: start; }
+  .ticket { grid-column: 1; grid-row: 1; }
+  .viz { grid-column: 2; grid-row: 1; gap: 10px; }
+  .chart-wrap { height: 400px; }
+}
+@media (min-width: 900px) and (min-height: 720px) {
+  .viz { position: sticky; top: calc(16px + env(safe-area-inset-top, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="masthead">
+    <h1>20-Year Bankroll Simulator</h1>
+    <p class="dek">Set your trade stats and sizing. Every trade compounds from today out to <span id="dekEnd">Oct 2046</span>.</p>
+  </header>
+
+  <div class="workbench">
+    <section class="viz" aria-label="Projection">
+      <div class="readout" aria-live="polite">
+        <div class="ro-top"><p class="eyebrow" id="roLabel">Median bankroll</p><span class="ro-date" id="roDate"></span></div>
+        <div class="hero-row"><span class="hero" id="roHero">$0</span><span class="mult" id="roMult"></span></div>
+        <div class="ro-series" id="roSeries"></div>
+      </div>
+      <div class="chart-wrap" id="chartWrap">
+        <svg id="chart" role="img" tabindex="0" aria-label="Projected bankroll chart"></svg>
+        <button type="button" class="scale-btn" id="scaleBtn" aria-pressed="true" title="Switch between log and linear scale">Log</button>
+      </div>
+      <div class="legend" id="legend" aria-label="Lines on the chart">
+        <button type="button" class="chip" data-series="median" aria-pressed="true"><i class="key"></i>Median</button>
+        <button type="button" class="chip" data-series="fan" aria-pressed="true"><i class="key fan"></i>Range</button>
+        <span class="chip-pair" id="runPair">
+          <button type="button" class="chip" data-series="run" aria-pressed="true"><i class="key run"></i>One run</button>
+          <button type="button" class="chip icon" id="rerollBtn" aria-label="Show a new random run" title="New random run"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.61-3.89" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M12.2 1.8v2.6H9.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </span>
+        <button type="button" class="chip" data-series="ev" aria-pressed="false"><i class="key ev"></i>Mean</button>
+      </div>
+    </section>
+
+    <section class="ticket" aria-labelledby="ticketTitle">
+      <div class="ticket-head">
+        <h2 id="ticketTitle">Inputs</h2>
+        <button type="button" class="text-btn" id="resetBtn">Reset</button>
+      </div>
+      <p class="ticket-note">These start as example numbers. Swap in your own.</p>
+
+      <div class="group" role="group" aria-labelledby="gAccount">
+        <h3 class="eyebrow" id="gAccount">Account</h3>
+        <div class="field">
+          <div class="field-row">
+            <label for="f-bankroll">Starting bankroll</label>
+            <span class="num"><span class="affix">$</span><input id="f-bankroll" inputmode="decimal" autocomplete="off" spellcheck="false"></span>
+          </div>
+          <input type="range" id="r-bankroll" min="0" max="1000" step="1" aria-label="Starting bankroll">
+        </div>
+        <div class="field">
+          <div class="field-row">
+            <label for="f-size">Size per trade</label>
+            <span class="num"><input id="f-size" inputmode="decimal" autocomplete="off" spellcheck="false"><span class="affix">% of bankroll</span></span>
+          </div>
+          <input type="range" id="r-size" min="0" max="1000" step="1" aria-label="Size per trade">
+          <p class="calc" id="sizeCalc"></p>
+          <p class="note" id="sizeNote" hidden></p>
+        </div>
+      </div>
+
+      <div class="group" role="group" aria-labelledby="gSchedule">
+        <h3 class="eyebrow" id="gSchedule">Schedule</h3>
+        <div class="field">
+          <div class="field-row">
+            <label for="f-years">Time horizon</label>
+            <span class="num"><input id="f-years" inputmode="numeric" autocomplete="off" spellcheck="false"><span class="affix" id="yearsAffix">years</span></span>
+          </div>
+          <input type="range" id="r-years" min="1" max="20" step="1" aria-label="Time horizon">
+        </div>
+        <div class="field">
+          <div class="field-row">
+            <label for="f-trades">Trades per day</label>
+            <span class="num"><input id="f-trades" inputmode="decimal" autocomplete="off" spellcheck="false"></span>
+          </div>
+          <input type="range" id="r-trades" min="1" max="20" step="1" aria-label="Trades per day">
+        </div>
+        <label class="switch"><input type="checkbox" role="switch" id="f-weekends"><span class="track" aria-hidden="true"></span><span>Skip weekends</span></label>
+        <label class="switch"><input type="checkbox" role="switch" id="f-holidays"><span class="track" aria-hidden="true"></span><span>Skip market holidays</span></label>
+        <p class="calc" id="schedCalc"></p>
+      </div>
+
+      <div class="group" role="group" aria-labelledby="gResults">
+        <div class="group-head">
+          <h3 class="eyebrow" id="gResults">Trade results</h3>
+          <div class="seg" role="group" aria-label="How to enter results">
+            <button type="button" data-mode="wl" aria-pressed="true">Win / loss</button>
+            <button type="button" data-mode="avg" aria-pressed="false">One average</button>
+          </div>
+        </div>
+        <p class="group-sub">P/L is a % of the money in each trade.</p>
+        <div class="fields" id="wlFields">
+          <div class="field">
+            <div class="field-row">
+              <label for="f-winRate">Win rate</label>
+              <span class="num"><input id="f-winRate" inputmode="decimal" autocomplete="off" spellcheck="false"><span class="affix">%</span></span>
+            </div>
+            <input type="range" id="r-winRate" min="0" max="200" step="1" aria-label="Win rate">
+          </div>
+          <div class="field">
+            <div class="field-row">
+              <label for="f-avgWin">Average win</label>
+              <span class="num"><span class="affix">+</span><input id="f-avgWin" inputmode="decimal" autocomplete="off" spellcheck="false"><span class="affix">%</span></span>
+            </div>
+            <input type="range" id="r-avgWin" class="gain" min="0" max="3000" step="1" aria-label="Average win">
+          </div>
+          <div class="field">
+            <div class="field-row">
+              <label for="f-avgLoss">Average loss</label>
+              <span class="num"><input id="f-avgLoss" inputmode="decimal" autocomplete="off" spellcheck="false"><span class="affix">%</span></span>
+            </div>
+            <input type="range" id="r-avgLoss" class="loss" min="0" max="200" step="1" aria-label="Average loss">
+            <p class="calc">−100% means the option expired worthless.</p>
+          </div>
+        </div>
+        <div class="fields" id="avgFields" hidden>
+          <div class="field">
+            <div class="field-row">
+              <label for="f-avgPL">Average P/L per trade</label>
+              <span class="num"><input id="f-avgPL" inputmode="decimal" autocomplete="off" spellcheck="false"><span class="affix">%</span></span>
+            </div>
+            <input type="range" id="r-avgPL" min="0" max="4000" step="1" aria-label="Average P/L per trade">
+            <p class="calc">Any value from −100% to +999,999,999%. Every trade returns exactly this.</p>
+          </div>
+        </div>
+        <p class="calc" id="edgeCalc"></p>
+      </div>
+
+      <details class="group cap" id="capDetails">
+        <summary><span class="eyebrow">Position cap</span><span class="cap-state" id="capState">Off</span></summary>
+        <div class="fields cap-fields" id="capFields">
+          <label class="switch"><input type="checkbox" role="switch" id="f-capOn"><span class="track" aria-hidden="true"></span><span>Cap the dollars in each trade</span></label>
+          <div class="field">
+            <div class="field-row">
+              <label for="f-cap">Max per trade</label>
+              <span class="num"><span class="affix">$</span><input id="f-cap" inputmode="decimal" autocomplete="off" spellcheck="false"></span>
+            </div>
+            <input type="range" id="r-cap" min="0" max="1000" step="1" aria-label="Max per trade">
+          </div>
+          <p class="hint">Big 0DTE orders fill worse and can move the price. Once your position hits the cap, each trade risks a fixed dollar amount, so gains add up instead of compounding.</p>
+          <p class="calc" id="capCalc"></p>
+        </div>
+      </details>
+    </section>
+  </div>
+
+  <section class="math" aria-labelledby="mathTitle">
+    <h2 id="mathTitle">Key numbers</h2>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <section class="notes" aria-labelledby="notesTitle">
+    <h2 id="notesTitle">How the simulation works</h2>
+    <ul id="notesList">
+      <li>Each trade puts your chosen share of the bankroll at that moment on the line, so wins and losses compound trade by trade.</li>
+      <li>P/L is a percentage of the position. A trade that loses −100% wipes out the money in that trade, not the whole account.</li>
+      <li id="noteModel">Trades win at random at your win rate. Each win pays the average win and each loss costs the average loss.</li>
+      <li id="noteRuns">The chart runs 1,000 simulated careers from the same inputs. The bold line is the median run, and the shaded fan holds the middle 50% and 80% of runs.</li>
+      <li>Market holidays follow the NYSE schedule. Fees, slippage, taxes, deposits and withdrawals are left out.</li>
+    </ul>
+    <details class="table-view" id="tableView">
+      <summary id="tableSummary">Year-by-year table</summary>
+      <div class="table-scroll"><table id="yearTable"></table></div>
+    </details>
+  </section>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ===== CORE START =====
+const DAY = 86400000;
+const YEAR = 365.2425 * DAY;
+const LN10 = Math.LN10;
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ln(exp(x) + delta), safe for very large x
+function addLog(x, delta) {
+  if (x > 700) {
+    const r = delta * Math.exp(-x);
+    return r <= -1 ? -Infinity : x + Math.log1p(r);
+  }
+  const B = Math.exp(x) + delta;
+  return B > 0 ? Math.log(B) : -Infinity;
+}
+
+function easterSunday(y) {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4;
+  const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31), day = ((h + l - 7 * m + 114) % 31) + 1;
+  return Date.UTC(y, month - 1, day);
+}
+
+// n >= 1: nth weekday of the month; n = -1: last one
+function nthWeekday(y, month, weekday, n) {
+  if (n > 0) {
+    const first = new Date(Date.UTC(y, month, 1)).getUTCDay();
+    return Date.UTC(y, month, 1 + ((weekday - first + 7) % 7) + (n - 1) * 7);
+  }
+  const last = new Date(Date.UTC(y, month + 1, 0));
+  return Date.UTC(y, month, last.getUTCDate() - ((last.getUTCDay() - weekday + 7) % 7));
+}
+
+// NYSE rule: Saturday holidays close the Friday before (except New Year's Day), Sunday holidays close Monday
+function observedDay(ms, saturdayToFriday) {
+  const dow = new Date(ms).getUTCDay();
+  if (dow === 6) return saturdayToFriday ? ms - DAY : null;
+  if (dow === 0) return ms + DAY;
+  return ms;
+}
+
+function marketHolidays(y) {
+  const out = [];
+  const add = ms => { if (ms != null) out.push(Math.round(ms / DAY)); };
+  add(observedDay(Date.UTC(y, 0, 1), false));         // New Year's Day
+  add(nthWeekday(y, 0, 1, 3));                        // Martin Luther King Jr. Day
+  add(nthWeekday(y, 1, 1, 3));                        // Washington's Birthday
+  add(easterSunday(y) - 2 * DAY);                     // Good Friday
+  add(nthWeekday(y, 4, 1, -1));                       // Memorial Day
+  if (y >= 2022) add(observedDay(Date.UTC(y, 5, 19), true)); // Juneteenth
+  add(observedDay(Date.UTC(y, 6, 4), true));          // Independence Day
+  add(nthWeekday(y, 8, 1, 1));                        // Labor Day
+  add(nthWeekday(y, 10, 4, 4));                       // Thanksgiving
+  add(observedDay(Date.UTC(y, 11, 25), true));        // Christmas
+  return out;
+}
+
+function buildCalendar(startMs, endMs, skipWeekends, skipHolidays, tradesPerDay) {
+  const hol = new Set();
+  if (skipHolidays) {
+    const y0 = new Date(startMs).getUTCFullYear(), y1 = new Date(endMs).getUTCFullYear();
+    for (let y = y0; y <= y1; y++) for (const d of marketHolidays(y)) hol.add(d);
+  }
+  const days = [];
+  const d0 = Math.round(startMs / DAY), d1 = Math.round(endMs / DAY);
+  for (let d = d0; d <= d1; d++) {
+    const dow = (d + 4) % 7; // day 0 (1970-01-01) was a Thursday
+    if (skipWeekends && (dow === 0 || dow === 6)) continue;
+    if (hol.has(d)) continue;
+    days.push(d);
+  }
+  const n = days.length;
+  const trades = new Int32Array(n);
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    const t = Math.floor((i + 1) * tradesPerDay + 1e-9) - Math.floor(i * tradesPerDay + 1e-9);
+    trades[i] = t;
+    total += t;
+  }
+  // group trading days into calendar weeks (Monday start)
+  const chunkEnd = [], chunkT = [], chunkLast = [];
+  let week = null;
+  for (let i = 0; i < n; i++) {
+    const wk = Math.floor((days[i] + 3) / 7);
+    if (wk !== week) { chunkEnd.push(0); chunkT.push(0); chunkLast.push(0); week = wk; }
+    const c = chunkEnd.length - 1;
+    chunkEnd[c] = days[i] * DAY;
+    chunkT[c] += trades[i];
+    chunkLast[c] = i;
+  }
+  return {
+    start: startMs, end: endMs, nDays: n, total,
+    days: Int32Array.from(days), trades,
+    chunkEnd: Float64Array.from(chunkEnd), chunkT: Int32Array.from(chunkT), chunkLast: Int32Array.from(chunkLast),
+    daysPerYear: n / ((endMs - startMs) / YEAR),
+  };
+}
+
+// Per-week lookup tables: the CDF of Binomial(T, W) for inverse sampling, and the
+// log change in bankroll for K wins out of T trades (compounding regime).
+function makeWeekTables(W, lw, ll, maxT) {
+  const LF = new Float64Array(maxT + 1);
+  for (let k = 1; k <= maxT; k++) LF[k] = LF[k - 1] + Math.log(k);
+  const lnW = Math.log(W), lnQ = Math.log(1 - W);
+  const cache = new Map();
+  return function tables(T) {
+    let t = cache.get(T);
+    if (t) return t;
+    const cdf = new Float64Array(T + 1);
+    if (W <= 0) cdf.fill(1);
+    else if (W >= 1) { cdf.fill(0); cdf[T] = 1; }
+    else {
+      let acc = 0;
+      for (let k = 0; k <= T; k++) {
+        acc += Math.exp(LF[T] - LF[k] - LF[T - k] + k * lnW + (T - k) * lnQ);
+        cdf[k] = acc;
+      }
+      for (let k = 0; k <= T; k++) cdf[k] /= acc;
+      cdf[T] = 1;
+    }
+    const inc = new Float64Array(T + 1);
+    for (let k = 0; k <= T; k++) inc[k] = k === T ? T * lw : (ll === -Infinity ? -Infinity : k * lw + (T - k) * ll);
+    t = { cdf, inc };
+    cache.set(T, t);
+    return t;
+  };
+}
+
+// k-th smallest of a[left..right], partitioning in place (Hoare quickselect)
+function selectK(a, k, left, right) {
+  while (right > left) {
+    const x = a[(left + right) >> 1];
+    let i = left, j = right;
+    while (i <= j) {
+      while (a[i] < x) i++;
+      while (a[j] > x) j--;
+      if (i <= j) { const t = a[i]; a[i] = a[j]; a[j] = t; i++; j--; }
+    }
+    if (k <= j) right = j;
+    else if (k >= i) left = i;
+    else return a[k];
+  }
+  return a[k];
+}
+
+// p: { B0, f, W, a, b, cap }  (f, a, b as fractions; cap in $ or Infinity)
+function runMonteCarlo(p, cal, P, seed) {
+  const nC = cal.chunkEnd.length;
+  const L0 = Math.log(p.B0);
+  const lw = Math.log1p(p.f * p.a);
+  const lossFrac = p.f * p.b;
+  const ll = lossFrac >= 1 ? -Infinity : Math.log1p(-lossFrac);
+  const capped = Number.isFinite(p.cap);
+  const thr = capped ? Math.log(p.cap / p.f) : Infinity;
+  let maxT = 1;
+  for (let c = 0; c < nC; c++) if (cal.chunkT[c] > maxT) maxT = cal.chunkT[c];
+  const tables = makeWeekTables(p.W, lw, ll, maxT);
+  let rs = seed | 0; // mulberry32 state, inlined in the hot loop
+  const L = new Float64Array(P).fill(L0);
+  const peak = new Float64Array(P).fill(L0);
+  const dd = new Float64Array(P);
+  const k10 = Math.round(0.1 * (P - 1)), k25 = Math.round(0.25 * (P - 1)), k50 = Math.round(0.5 * (P - 1));
+  const k75 = Math.round(0.75 * (P - 1)), k90 = Math.round(0.9 * (P - 1));
+  const q = [0, 1, 2, 3, 4].map(() => new Float64Array(nC + 1));
+  for (const arr of q) arr[0] = L0 / LN10;
+  const mean = capped ? new Float64Array(nC + 1) : null;
+  if (mean) mean[0] = L0 / LN10;
+  const s = new Float64Array(P);
+  for (let c = 0; c < nC; c++) {
+    const T = cal.chunkT[c];
+    if (T > 0) {
+      const tb = tables(T), cdf = tb.cdf, inc = tb.inc, small = T <= 16;
+      for (let i = 0; i < P; i++) {
+        rs = (rs + 0x6D2B79F5) | 0;
+        let r = Math.imul(rs ^ (rs >>> 15), rs | 1);
+        r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
+        const u = ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+        let x = L[i];
+        if (x === -Infinity) continue;
+        let k = 0;
+        if (small) { while (cdf[k] <= u) k++; }
+        else {
+          let hi = T;
+          while (k < hi) { const mid = (k + hi) >> 1; if (cdf[mid] > u) hi = mid; else k = mid + 1; }
+        }
+        if (x >= thr) x = addLog(x, p.cap * (k * p.a - (T - k) * p.b));
+        else x += inc[k];
+        L[i] = x;
+        const pk = peak[i];
+        if (x > pk) peak[i] = x;
+        else if (pk - x > dd[i]) dd[i] = pk - x;
+      }
+      s.set(L);
+      const v50 = selectK(s, k50, 0, P - 1);
+      const v25 = selectK(s, k25, 0, k50 - 1);
+      const v10 = selectK(s, k10, 0, k25 - 1);
+      const v75 = selectK(s, k75, k50 + 1, P - 1);
+      const v90 = selectK(s, k90, k75 + 1, P - 1);
+      q[0][c + 1] = v10 / LN10; q[1][c + 1] = v25 / LN10; q[2][c + 1] = v50 / LN10;
+      q[3][c + 1] = v75 / LN10; q[4][c + 1] = v90 / LN10;
+      if (mean) {
+        let mx = -Infinity;
+        for (let i = 0; i < P; i++) if (L[i] > mx) mx = L[i];
+        if (mx === -Infinity) mean[c + 1] = -Infinity;
+        else {
+          let sum = 0;
+          for (let i = 0; i < P; i++) sum += Math.exp(L[i] - mx);
+          mean[c + 1] = (mx + Math.log(sum / P)) / LN10;
+        }
+      }
+    } else {
+      for (let j = 0; j < 5; j++) q[j][c + 1] = q[j][c];
+      if (mean) mean[c + 1] = mean[c];
+    }
+  }
+  return { q, mean, endL: L, dd };
+}
+
+// One path, trade by trade. Returns log10 bankroll after each trading day.
+function runSample(p, cal, seed) {
+  const n = cal.nDays;
+  const lw = Math.log1p(p.f * p.a);
+  const lossFrac = p.f * p.b;
+  const ll = lossFrac >= 1 ? -Infinity : Math.log1p(-lossFrac);
+  const thr = Number.isFinite(p.cap) ? Math.log(p.cap / p.f) : Infinity;
+  const rng = mulberry32(seed);
+  const logs = new Float64Array(n + 1);
+  let x = Math.log(p.B0), peak = x, dd = 0, streak = 0, longest = 0;
+  logs[0] = x / LN10;
+  for (let i = 0; i < n; i++) {
+    const T = cal.trades[i];
+    for (let k = 0; k < T; k++) {
+      const win = rng() < p.W;
+      if (x === -Infinity) continue;
+      if (win) streak = 0;
+      else if (++streak > longest) longest = streak;
+      if (x >= thr) x = addLog(x, p.cap * (win ? p.a : -p.b));
+      else x = win ? x + lw : (ll === -Infinity ? -Infinity : x + ll);
+      if (x > peak) peak = x;
+      else if (peak - x > dd) dd = peak - x;
+    }
+    logs[i + 1] = x / LN10;
+  }
+  return { logs, longest, dd };
+}
+
+// Every trade returns exactly p.avg (fraction). Deterministic.
+function runAverage(p, cal) {
+  const nC = cal.chunkEnd.length;
+  const r = p.f * p.avg;
+  const lr = r <= -1 ? -Infinity : Math.log1p(r);
+  const capped = Number.isFinite(p.cap);
+  const thr = capped ? Math.log(p.cap / p.f) : Infinity;
+  const out = new Float64Array(nC + 1);
+  let x = Math.log(p.B0);
+  out[0] = x / LN10;
+  for (let c = 0; c < nC; c++) {
+    let T = cal.chunkT[c];
+    while (T > 0 && x !== -Infinity) {
+      if (x >= thr) {
+        if (p.avg >= 0) { x = addLog(x, p.cap * p.avg * T); T = 0; }
+        else { x = addLog(x, p.cap * p.avg); T--; }
+      } else if (lr === -Infinity) { x = -Infinity; T = 0; }
+      else if (lr > 0 && capped) {
+        const k = Math.min(T, Math.max(1, Math.ceil((thr - x) / lr)));
+        x += k * lr;
+        T -= k;
+      } else { x += T * lr; T = 0; }
+    }
+    out[c + 1] = x / LN10;
+  }
+  return out;
+}
+
+// Exact mean bankroll without a cap: B0 * (1 + f*mu)^trades
+function meanPath(p, cal) {
+  const mu = p.W * p.a - (1 - p.W) * p.b;
+  const step = 1 + p.f * mu;
+  const ls = step > 0 ? Math.log10(step) : -Infinity;
+  const nC = cal.chunkEnd.length;
+  const out = new Float64Array(nC + 1);
+  let x = Math.log10(p.B0);
+  out[0] = x;
+  for (let c = 0; c < nC; c++) {
+    const T = cal.chunkT[c];
+    if (T > 0 && x !== -Infinity) x = ls === -Infinity ? -Infinity : x + T * ls;
+    out[c + 1] = x;
+  }
+  return out;
+}
+
+function edgeMath(p) {
+  const mu = p.W * p.a - (1 - p.W) * p.b;
+  const lw = Math.log1p(p.f * p.a);
+  const ll = p.f * p.b >= 1 ? -Infinity : Math.log1p(-p.f * p.b);
+  const g = p.W >= 1 ? lw : p.W <= 0 ? ll : p.W * lw + (1 - p.W) * ll;
+  let kelly;
+  if (p.a <= 0 || p.W <= 0) kelly = 0;
+  else if (p.b <= 0) kelly = Infinity;
+  else kelly = p.W / p.b - (1 - p.W) / p.a;
+  const breakeven = p.a + p.b > 0 ? p.b / (p.a + p.b) : NaN;
+  return { mu, g, kelly, breakeven };
+}
+// ===== CORE END =====
+
+// ---------- formatting ----------
+const MINUS = '−';
+const UNITS = ['', 'K', 'M', 'B', 'T'];
+
+function trimZeros(s) { return s.indexOf('.') >= 0 ? s.replace(/0+$/, '').replace(/\.$/, '') : s; }
+function sig3(m) { return trimZeros(m < 10 ? m.toFixed(2) : m < 100 ? m.toFixed(1) : m.toFixed(0)); }
+function fmtInt(n) { return Math.round(n).toLocaleString('en-US'); }
+
+// Compact number from log10 value, e.g. {main:'1.31', unit:'M'} or {main:'4.2×10', exp:'17'}
+function compactParts(L10) {
+  if (L10 < 3) {
+    const v = Math.pow(10, L10);
+    return { main: v < 10 ? trimZeros(v.toFixed(2)) : String(Math.round(v)) };
+  }
+  if (L10 < 15) {
+    let idx = Math.floor(L10 / 3);
+    let s = sig3(Math.pow(10, L10 - idx * 3));
+    if (parseFloat(s) >= 1000) { idx++; s = sig3(Math.pow(10, L10 - idx * 3)); }
+    if (idx < UNITS.length) return { main: s, unit: UNITS[idx] };
+  }
+  let E = Math.floor(L10);
+  let s = trimZeros(Math.pow(10, L10 - E).toFixed(2));
+  if (parseFloat(s) >= 10) { E++; s = trimZeros(Math.pow(10, L10 - E).toFixed(2)); }
+  return { main: s === '1' ? '10' : s + '×10', exp: fmtInt(E) };
+}
+
+function moneyParts(L10) {
+  if (L10 === -Infinity || Number.isNaN(L10)) return { main: '$0' };
+  if (L10 === Infinity) return { main: '∞' };
+  if (L10 < 0) return { main: '<$1' };
+  const c = compactParts(L10);
+  return { main: '$' + c.main, unit: c.unit, exp: c.exp };
+}
+function partsHTML(p) { return p.main + (p.unit || '') + (p.exp ? '<sup>' + p.exp + '</sup>' : ''); }
+function partsText(p) { return p.main + (p.unit || '') + (p.exp ? '^' + p.exp : ''); }
+function moneyHTML(L10) { return partsHTML(moneyParts(L10)); }
+function moneyText(L10) { return partsText(moneyParts(L10)); }
+
+// Percent from a fraction: 0.276 -> "27.6%"
+function pctStr(x) {
+  if (!Number.isFinite(x)) return x > 0 ? '∞%' : '—';
+  const v = Math.abs(x * 100);
+  let s;
+  if (v === 0) s = '0';
+  else if (v < 1) s = trimZeros(v.toFixed(2));
+  else if (v < 100) s = trimZeros(v.toFixed(1));
+  else if (v < 1e15) s = fmtInt(v);
+  else return partsHTML(compactParts(Math.log10(v))) + '%';
+  return s + '%';
+}
+function signedPct(x) {
+  if (Number.isNaN(x)) return '—';
+  const s = pctStr(x);
+  return x > 0 ? '+' + s : x < 0 ? MINUS + s : s;
+}
+// Growth multiple from a log10 ratio; small changes as %, big ones as ×N
+function growthHTML(d) {
+  if (d === -Infinity) return MINUS + '100%';
+  if (!Number.isFinite(d)) return '';
+  if (d < Math.log10(2)) return signedPct(Math.pow(10, d) - 1);
+  return '×' + partsHTML(compactParts(d));
+}
+function tone(x) { return x > 0 ? 'gain' : x < 0 ? 'loss' : ''; }
+function probText(count, P) {
+  if (count <= 0) return '<' + trimZeros((100 / P).toFixed(2)) + '%';
+  if (count >= P) return '>' + trimZeros((100 - 100 / P).toFixed(2)) + '%';
+  const v = 100 * count / P;
+  return trimZeros(v.toFixed(v < 10 ? 1 : 0)) + '%';
+}
+function ratioStr(r) { return r < 0.1 ? r.toFixed(2) : r < 10 ? trimZeros(r.toFixed(2)) : fmtInt(r); }
+function fmtDate(ms) { return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }); }
+function fmtMonth(ms) { return new Date(ms).toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' }); }
+function fmtTrades(n) { return trimZeros(n.toFixed(2)); }
+
+// ---------- inputs ----------
+const roundTo = (v, step) => Math.round(v / step) * step;
+function roundSig(v, n) {
+  if (v === 0) return 0;
+  const e = Math.floor(Math.log10(Math.abs(v))) - n + 1;
+  const p = Math.pow(10, e);
+  return Math.round(v / p) * p;
+}
+function snapPct(v) {
+  const a = Math.abs(v);
+  if (a < 10) return roundTo(v, 0.5);
+  if (a < 100) return Math.round(v);
+  if (a < 1000) return roundTo(v, 5);
+  return roundSig(v, 3);
+}
+
+const SPECS = {
+  bankroll: { min: 1, max: 1e15, tMin: 0, tMax: 1000, toV: t => Math.pow(10, 2 + t / 200), toT: v => (Math.log10(v) - 2) * 200, snap: v => roundSig(v, 2) },
+  size: { min: 0.01, max: 100, tMin: 0, tMax: 1000, toV: t => Math.pow(10, -1 + t * 3 / 1000), toT: v => (Math.log10(v) + 1) * 1000 / 3,
+    snap: v => (v < 1 ? Math.max(0.1, roundTo(v, 0.1)) : v < 10 ? roundTo(v, 0.5) : Math.min(100, Math.round(v))) },
+  years: { min: 1, max: 20, tMin: 1, tMax: 20, toV: t => t, toT: v => v, snap: v => Math.round(v) },
+  trades: { min: 0.01, max: 500, tMin: 1, tMax: 20, toV: t => t, toT: v => v, snap: v => Math.round(v) },
+  winRate: { min: 0, max: 100, tMin: 0, tMax: 200, toV: t => t / 2, toT: v => v * 2, snap: v => roundTo(v, 0.5) },
+  avgWin: { min: 0, max: 999999999, tMin: 0, tMax: 3000, toV: t => Math.pow(10, t * 9 / 3000) - 1, toT: v => Math.log10(v + 1) * 3000 / 9,
+    snap: v => Math.min(999999999, Math.max(0, snapPct(v))) },
+  avgLoss: { min: -100, max: 0, tMin: 0, tMax: 200, toV: t => -100 + t / 2, toT: v => (v + 100) * 2, snap: v => roundTo(v, 0.5), origin: 200 },
+  avgPL: { min: -100, max: 999999999, tMin: 0, tMax: 4000,
+    toV: t => (t <= 1000 ? -100 + t / 10 : Math.pow(10, (t - 1000) * 9 / 3000) - 1),
+    toT: v => (v <= 0 ? (v + 100) * 10 : 1000 + Math.log10(v + 1) * 3000 / 9),
+    snap: v => (v <= 0 ? roundTo(v, 0.5) : Math.min(999999999, snapPct(v))), origin: 1000 },
+  cap: { min: 1, max: 1e15, tMin: 0, tMax: 1000, toV: t => Math.pow(10, 3 + t / 200), toT: v => (Math.log10(v) - 3) * 200, snap: v => roundSig(v, 2) },
+};
+
+function fixValue(key, v) {
+  if (key === 'years') v = Math.round(v);
+  if (key === 'avgLoss' && v > 0) v = -v;
+  if (key === 'avgWin' && v < 0) v = -v;
+  const sp = SPECS[key];
+  return Math.min(sp.max, Math.max(sp.min, v));
+}
+function fmtField(key, v) {
+  if (key === 'years') return String(Math.round(v));
+  if (key === 'bankroll' || key === 'cap') return v >= 1000 ? fmtInt(v) : String(+v.toFixed(2));
+  if (key === 'size' || key === 'trades') return String(+v.toFixed(2));
+  if (key === 'winRate') return String(+v.toFixed(1));
+  return Math.abs(v) >= 1000 ? fmtInt(v) : String(+v.toFixed(2));
+}
+function valueText(key, v) {
+  if (key === 'years') return v + (v === 1 ? ' year' : ' years');
+  if (key === 'bankroll' || key === 'cap') return '$' + fmtField(key, v);
+  if (key === 'trades') return fmtField(key, v) + ' trades per day';
+  if (key === 'size') return fmtField(key, v) + '% of bankroll';
+  return fmtField(key, v) + '%';
+}
+function parseNum(str) {
+  let s = String(str).trim().toLowerCase().replace(/−/g, '-').replace(/[,\s$%+_]/g, '');
+  let mult = 1;
+  const m = s.match(/^(-?[\d.]+)([kmbt])$/);
+  if (m) { s = m[1]; mult = { k: 1e3, m: 1e6, b: 1e9, t: 1e12 }[m[2]]; }
+  if (!/^-?(\d+\.?\d*|\.\d+)$/.test(s)) return NaN;
+  return parseFloat(s) * mult;
+}
+
+// ---------- state ----------
+const STORE_KEY = 'bankroll-sim-v1';
+const DEFAULTS = {
+  years: 20, bankroll: 10000, size: 2, trades: 1, skipWeekends: true, skipHolidays: true,
+  mode: 'wl', winRate: 50, avgWin: 45, avgLoss: -35, avgPL: 5,
+  capOn: false, cap: 100000, scale: 'log',
+  show: { median: true, fan: true, run: true, ev: false },
+  runSeed: 3,
+};
+function sanitize(s) {
+  const out = JSON.parse(JSON.stringify(DEFAULTS));
+  if (!s || typeof s !== 'object') return out;
+  for (const k of Object.keys(SPECS)) if (typeof s[k] === 'number' && Number.isFinite(s[k])) out[k] = fixValue(k, s[k]);
+  for (const k of ['skipWeekends', 'skipHolidays', 'capOn']) if (typeof s[k] === 'boolean') out[k] = s[k];
+  if (s.mode === 'wl' || s.mode === 'avg') out.mode = s.mode;
+  if (s.scale === 'log' || s.scale === 'linear') out.scale = s.scale;
+  if (s.show && typeof s.show === 'object') for (const k of Object.keys(out.show)) if (typeof s.show[k] === 'boolean') out.show[k] = s.show[k];
+  if (Number.isInteger(s.runSeed)) out.runSeed = s.runSeed >>> 0;
+  return out;
+}
+function loadState() {
+  try { const raw = localStorage.getItem(STORE_KEY); return raw ? sanitize(JSON.parse(raw)) : sanitize(null); }
+  catch (e) { return sanitize(null); }
+}
+function saveState() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
+}
+let state = loadState();
+
+// ---------- model ----------
+const MC_SEED = 20261026;
+const P_FULL = 1000, P_QUICK = 300;
+let model = null;
+let calKey = '', calCache = null;
+let mcKey = '', mcCache = null;
+
+function today() {
+  const now = new Date();
+  return Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+}
+function getCalendar() {
+  const start = today();
+  const sd = new Date(start);
+  const end = Date.UTC(sd.getUTCFullYear() + state.years, sd.getUTCMonth(), sd.getUTCDate());
+  const key = [start, end, state.skipWeekends, state.skipHolidays, state.trades].join('|');
+  if (key !== calKey) { calCache = buildCalendar(start, end, state.skipWeekends, state.skipHolidays, state.trades); calKey = key; mcKey = ''; }
+  return calCache;
+}
+function params() {
+  return {
+    B0: state.bankroll,
+    f: state.size / 100,
+    W: state.winRate / 100,
+    a: state.avgWin / 100,
+    b: -state.avgLoss / 100,
+    avg: state.avgPL / 100,
+    cap: state.capOn ? state.cap : Infinity,
+    tradesPerDay: state.trades,
+  };
+}
+function compute(P) {
+  const p = params();
+  const cal = getCalendar();
+  const nC = cal.chunkEnd.length;
+  const times = new Float64Array(nC + 1);
+  times[0] = cal.start;
+  times.set(cal.chunkEnd, 1);
+  const m = { p, cal, times, L0: Math.log10(p.B0), P, mode: state.mode };
+  if (state.mode === 'wl') {
+    const key = [calKey, P, p.B0, p.f, p.W, p.a, p.b, p.cap].join('|');
+    if (key !== mcKey) { mcCache = runMonteCarlo(p, cal, P, MC_SEED); mcKey = key; }
+    m.mc = mcCache;
+    const r = runSample(p, cal, state.runSeed);
+    const runW = new Float64Array(nC + 1);
+    runW[0] = r.logs[0];
+    for (let c = 0; c < nC; c++) runW[c + 1] = r.logs[cal.chunkLast[c] + 1];
+    m.run = r;
+    m.runW = runW;
+    m.ev = Number.isFinite(p.cap) ? m.mc.mean : meanPath(p, cal);
+    m.math = edgeMath(p);
+  } else {
+    m.det = runAverage(p, cal);
+  }
+  model = m;
+}
+
+// ---------- chart ----------
+const svg = document.getElementById('chart');
+const wrap = document.getElementById('chartWrap');
+const scaleBtn = document.getElementById('scaleBtn');
+let geo = null;
+let hoverIdx = null;
+
+function logTicks(lo, hi) {
+  const span = hi - lo;
+  const ticks = [];
+  if (span < 1 && hi < 300) {
+    // Inside one decade a log axis is close to linear, so step in round dollar amounts
+    const vLo = Math.pow(10, lo), vHi = Math.pow(10, hi);
+    const raw = (vHi - vLo) / 4;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    let step = mag * 10;
+    for (const mm of [1, 2, 2.5, 5]) if (mag * mm >= raw) { step = mag * mm; break; }
+    for (let k = Math.ceil(vLo / step - 1e-9); k * step <= vHi * (1 + 1e-9); k++) if (k > 0) ticks.push(Math.log10(k * step));
+  } else if (span <= 1.6) {
+    for (let e = Math.floor(lo); e <= Math.ceil(hi); e++) {
+      for (const mm of [1, 2, 5]) { const v = e + Math.log10(mm); if (v >= lo - 1e-9 && v <= hi + 1e-9) ticks.push(v); }
+    }
+  } else {
+    const step = Math.max(1, Math.ceil(span / 5));
+    for (let e = Math.ceil(lo / step) * step; e <= hi + 1e-9; e += step) ticks.push(e);
+  }
+  return ticks;
+}
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// Calendar ticks for any horizon: every 1, 2, 5 or 10 years, or quarters and months on short ones
+function timeTicks(t0, t1, pw) {
+  const a = new Date(t0), b = new Date(t1);
+  const spanMonths = (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + (b.getUTCMonth() - a.getUTCMonth());
+  const maxTicks = Math.max(2, Math.floor(pw / 46));
+  let step = 120;
+  for (const st of [1, 3, 6, 12, 24, 60, 120]) if (spanMonths / st <= maxTicks) { step = st; break; }
+  const ticks = [];
+  let abs = a.getUTCFullYear() * 12 + a.getUTCMonth() + 1;
+  abs = Math.ceil(abs / step) * step;
+  for (; ; abs += step) {
+    const y = Math.floor(abs / 12), mo = abs % 12;
+    const t = Date.UTC(y, mo, 1);
+    if (t > t1) break;
+    ticks.push({ t, year: y, jan: mo === 0, label: mo === 0 ? String(y) : MONTHS[mo] });
+  }
+  return ticks;
+}
+function addMonths(ms, n) {
+  const d = new Date(ms);
+  const y = d.getUTCFullYear(), m0 = d.getUTCMonth() + n;
+  const lastDay = new Date(Date.UTC(y, m0 + 1, 0)).getUTCDate();
+  return Date.UTC(y, m0, Math.min(d.getUTCDate(), lastDay));
+}
+function linTicks(hiL) {
+  const E = Math.floor(hiL);
+  const mant = Math.pow(10, hiL - E);
+  const steps = [0.1, 0.2, 0.25, 0.5, 1, 2, 2.5, 5];
+  let s = 5;
+  for (const st of steps) if (mant / st <= 5) { s = st; break; }
+  const top = Math.ceil(mant / s - 1e-9) * s;
+  const ticks = [];
+  for (let i = 0; i * s <= top + 1e-9; i++) ticks.push(i === 0 ? -Infinity : Math.log10(i * s) + E);
+  return { ticks, topL: Math.log10(top) + E };
+}
+function labelWidth(p, px) {
+  return ((p.main.length + (p.unit ? p.unit.length : 0)) * px) + (p.exp ? p.exp.length * px * 0.78 : 0);
+}
+function svgMoney(L10, x, y, anchor, cls, prefix) {
+  const p = moneyParts(L10);
+  let inner = (prefix || '') + p.main + (p.unit || '');
+  if (p.exp) inner += '<tspan dy="-0.45em" font-size="0.78em">' + p.exp + '</tspan>';
+  return '<text class="' + cls + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" text-anchor="' + anchor + '">' + inner + '</text>';
+}
+function pathOf(times, arr, x, y) {
+  let d = '';
+  for (let i = 0; i < arr.length; i++) d += (i ? 'L' : 'M') + x(times[i]).toFixed(1) + ',' + y(arr[i]).toFixed(1);
+  return d;
+}
+function areaOf(times, lowArr, highArr, x, y) {
+  let d = '';
+  for (let i = 0; i < highArr.length; i++) d += (i ? 'L' : 'M') + x(times[i]).toFixed(1) + ',' + y(highArr[i]).toFixed(1);
+  for (let i = lowArr.length - 1; i >= 0; i--) d += 'L' + x(times[i]).toFixed(1) + ',' + y(lowArr[i]).toFixed(1);
+  return d + 'Z';
+}
+
+function drawChart() {
+  const m = model;
+  if (!m) return;
+  const W = Math.max(240, Math.round(wrap.clientWidth));
+  const H = Math.max(140, Math.round(wrap.clientHeight));
+  const show = state.show;
+  const isWL = m.mode === 'wl';
+  const times = m.times, N = times.length, last = N - 1;
+  const q = isWL ? m.mc.q : null;
+
+  let lo = Infinity, hi = -Infinity;
+  const scan = arr => {
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i];
+      if (v > -Infinity && v < Infinity) { if (v < lo) lo = v; if (v > hi) hi = v; }
+    }
+  };
+  if (isWL) {
+    const any = show.median || show.fan || show.run || show.ev;
+    if (show.fan) { scan(q[0]); scan(q[4]); }
+    if (show.median || !any) scan(q[2]);
+    if (show.run) scan(m.runW);
+    if (show.ev) scan(m.ev);
+  } else scan(m.det);
+  lo = Math.min(lo, m.L0);
+  hi = Math.max(hi, m.L0);
+
+  const logScale = state.scale === 'log';
+  let yTicks, dLo = 0, dHi = 1, topL = 0;
+  if (logScale) {
+    dLo = Math.max(lo, 0);
+    dHi = Math.max(hi, dLo);
+    if (dHi - dLo < 0.3) {
+      const mid = (dHi + dLo) / 2;
+      dLo = mid - 0.15; dHi = mid + 0.15;
+      if (dLo < 0) { dHi -= dLo; dLo = 0; }
+    }
+    yTicks = logTicks(dLo, dHi);
+    const span = dHi - dLo;
+    dLo -= span * 0.03;
+    dHi += span * 0.08;
+  } else {
+    const lt = linTicks(hi);
+    yTicks = lt.ticks;
+    topL = lt.topL;
+  }
+
+  const PX = 6.4;
+  let labelW = 0;
+  for (const v of yTicks) labelW = Math.max(labelW, labelWidth(moneyParts(v), PX));
+  const L = Math.ceil(labelW + 12), R = 12, T = 12, B = 24;
+  const pw = W - L - R, ph = H - T - B;
+  const t0 = times[0], t1 = m.cal.end;
+  const x = t => L + (t - t0) / (t1 - t0) * pw;
+  const y = logScale
+    ? v => T + (dHi - (v < dLo ? dLo : v > dHi ? dHi : v)) / (dHi - dLo) * ph
+    : v => T + (1 - (v === -Infinity ? 0 : Math.min(1, Math.pow(10, v - topL)))) * ph;
+  geo = { W, H, L, T, pw, ph, t0, t1, x, y };
+
+  let s = '';
+  // gridlines + y labels
+  let labels = '';
+  for (const v of yTicks) {
+    const yy = y(v);
+    s += '<line class="gl" x1="' + L + '" x2="' + (W - R) + '" y1="' + yy.toFixed(1) + '" y2="' + yy.toFixed(1) + '"/>';
+    labels += svgMoney(v, L - 8, yy + 3.5, 'end', 'axis-text');
+  }
+  // x ticks: "Now" at the left edge, then calendar ticks sized to the horizon
+  const baseY = T + ph;
+  labels += '<text class="axis-text" x="' + L + '" y="' + (H - 6) + '" text-anchor="start">Now</text>';
+  s += '<line class="xt" x1="' + L + '" x2="' + L + '" y1="' + baseY + '" y2="' + (baseY + 4) + '"/>';
+  let yearShown = false;
+  for (const tk of timeTicks(t0, t1, pw)) {
+    const label = tk.jan || yearShown ? tk.label : tk.label + ' \u2019' + String(tk.year).slice(-2);
+    const tx = x(tk.t), half = label.length * 3.3;
+    if (tx - half < L + 26 || tx + half > W - 2) continue;
+    yearShown = true;
+    s += '<line class="xt" x1="' + tx.toFixed(1) + '" x2="' + tx.toFixed(1) + '" y1="' + baseY + '" y2="' + (baseY + 4) + '"/>';
+    labels += '<text class="axis-text" x="' + tx.toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + label + '</text>';
+  }
+  s += '<line class="baseline" x1="' + L + '" x2="' + (W - R) + '" y1="' + baseY + '" y2="' + baseY + '"/>';
+
+  // starting bankroll reference
+  const yStart = y(m.L0);
+  s += '<line class="start-ref" x1="' + L + '" x2="' + (W - R) + '" y1="' + yStart.toFixed(1) + '" y2="' + yStart.toFixed(1) + '"/>';
+
+  // series
+  if (isWL) {
+    if (show.fan) {
+      s += '<path class="fan-outer" d="' + areaOf(times, q[0], q[4], x, y) + '"/>';
+      s += '<path class="fan-inner" d="' + areaOf(times, q[1], q[3], x, y) + '"/>';
+    }
+    if (show.run) s += '<path class="s-run" d="' + pathOf(times, m.runW, x, y) + '"/>';
+    if (show.ev) s += '<path class="s-ev" d="' + pathOf(times, m.ev, x, y) + '"/>';
+    if (show.median) s += '<path class="s-median" d="' + pathOf(times, q[2], x, y) + '"/>';
+  } else {
+    s += '<path class="s-median" d="' + pathOf(times, m.det, x, y) + '"/>';
+  }
+
+  // end dots + direct labels
+  const xe = x(times[last]);
+  const placed = [];
+  const place = (text, yLine, preferAbove) => {
+    const w = text.length * 6.7 + 4;
+    const cands = preferAbove ? [yLine - 8, yLine + 16] : [yLine + 16, yLine - 8];
+    for (const yy of cands) {
+      if (yy - 10 < T || yy > T + ph - 3) continue;
+      const box = { x1: xe - 8 - w, x2: xe - 8, y1: yy - 10, y2: yy + 3 };
+      if (placed.some(b => !(box.x2 < b.x1 || box.x1 > b.x2 || box.y2 < b.y1 || box.y1 > b.y2))) continue;
+      placed.push(box);
+      return yy;
+    }
+    return null;
+  };
+  let dots = '', endLabels = '';
+  const ends = [];
+  if (isWL) {
+    if (show.median) ends.push({ cls: 'median', v: q[2][last], name: 'Median', r: 4 });
+    if (show.run) ends.push({ cls: 'run', v: m.runW[last], name: 'One run', r: 3.5 });
+    if (show.ev) ends.push({ cls: 'ev', v: m.ev[last], name: 'Mean', r: 3.5 });
+  } else {
+    ends.push({ cls: 'median', v: m.det[last], name: '', r: 4 });
+  }
+  const medY = ends.length ? y(ends[0].v) : 0;
+  for (const e of ends) {
+    const ey = y(e.v);
+    dots += '<circle class="dot ' + e.cls + '" cx="' + xe.toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="' + e.r + '"/>';
+    if (!e.name) continue;
+    const yy = place(e.name, ey, e.cls === 'median' ? true : ey <= medY);
+    if (yy != null) endLabels += '<text class="chart-label" x="' + (xe - 8).toFixed(1) + '" y="' + yy.toFixed(1) + '" text-anchor="end">' + e.name + '</text>';
+  }
+  // start label: on the side of the reference line away from where the lines end, right end first
+  let startLabel = '';
+  {
+    const w = ('Start ' + moneyText(m.L0)).length * 6.7 + 4;
+    const medEnd = isWL ? q[2][last] : m.det[last];
+    const below = yStart + 15, above = yStart - 7;
+    const sides = medEnd >= m.L0 ? [below, above] : [above, below];
+    const spots = [];
+    for (const yy of sides) spots.push({ x: W - R - 4, yy, anchor: 'end', x1: W - R - 4 - w, x2: W - R - 4 });
+    for (const yy of sides) spots.push({ x: L + 6, yy, anchor: 'start', x1: L + 6, x2: L + 6 + w });
+    for (const sp of spots) {
+      if (sp.yy - 10 < T || sp.yy > T + ph - 4) continue;
+      const box = { x1: sp.x1, x2: sp.x2, y1: sp.yy - 10, y2: sp.yy + 3 };
+      if (placed.some(b => !(box.x2 < b.x1 || box.x1 > b.x2 || box.y2 < b.y1 || box.y1 > b.y2))) continue;
+      startLabel = svgMoney(m.L0, sp.x, sp.yy, sp.anchor, 'chart-label quiet', 'Start ');
+      break;
+    }
+  }
+
+  s += dots + labels + startLabel + endLabels;
+  s += '<g id="cross" visibility="hidden"><line id="crossLine" class="cross-line" y1="' + T + '" y2="' + baseY + '"/>' +
+       '<circle id="crossEv" class="dot ev" r="3.5"/><circle id="crossRun" class="dot run" r="3.5"/><circle id="crossMed" class="dot median" r="4.5"/></g>';
+
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.innerHTML = s;
+  scaleBtn.style.left = (L + 6) + 'px';
+  scaleBtn.style.top = (T + 2) + 'px';
+  svg.setAttribute('aria-label', chartSummary());
+  renderHover();
+}
+
+function chartSummary() {
+  const m = model, last = m.times.length - 1;
+  const span = fmtDate(m.times[0]) + ' to ' + fmtDate(m.times[last]);
+  if (m.mode === 'wl') {
+    const q = m.mc.q;
+    return 'Projected bankroll from ' + span + '. Median run ends at ' + moneyText(q[2][last]) +
+      '; the middle 80% of runs end between ' + moneyText(q[0][last]) + ' and ' + moneyText(q[4][last]) + '.';
+  }
+  return 'Projected bankroll from ' + span + ', ending at ' + moneyText(m.det[last]) + '.';
+}
+
+function nearestIndex(t) {
+  const times = model.times;
+  let lo = 0, hi = times.length - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (times[mid] <= t) lo = mid; else hi = mid; }
+  return (t - times[lo] <= times[hi] - t) ? lo : hi;
+}
+
+function setDot(el, show, x, yv) {
+  if (!el) return;
+  if (!show) { el.setAttribute('visibility', 'hidden'); return; }
+  el.setAttribute('visibility', 'visible');
+  el.setAttribute('cx', x.toFixed(1));
+  el.setAttribute('cy', geo.y(yv).toFixed(1));
+}
+function renderHover() {
+  const g = document.getElementById('cross');
+  if (g && geo && hoverIdx != null && model) {
+    const m = model, i = Math.min(hoverIdx, m.times.length - 1);
+    const xx = geo.x(m.times[i]);
+    const line = document.getElementById('crossLine');
+    line.setAttribute('x1', xx.toFixed(1));
+    line.setAttribute('x2', xx.toFixed(1));
+    if (m.mode === 'wl') {
+      setDot(document.getElementById('crossMed'), state.show.median, xx, m.mc.q[2][i]);
+      setDot(document.getElementById('crossRun'), state.show.run, xx, m.runW[i]);
+      setDot(document.getElementById('crossEv'), state.show.ev, xx, m.ev[i]);
+    } else {
+      setDot(document.getElementById('crossMed'), true, xx, m.det[i]);
+      setDot(document.getElementById('crossRun'), false);
+      setDot(document.getElementById('crossEv'), false);
+    }
+    g.setAttribute('visibility', 'visible');
+  } else if (g) {
+    g.setAttribute('visibility', 'hidden');
+  }
+  updateReadout();
+}
+
+// ---------- readout ----------
+const roLabel = document.getElementById('roLabel');
+const roDate = document.getElementById('roDate');
+const roHero = document.getElementById('roHero');
+const roMult = document.getElementById('roMult');
+const roSeries = document.getElementById('roSeries');
+
+function roItem(keyCls, label, valueHTML) {
+  const span = document.createElement('span');
+  span.className = 'ro-item';
+  const k = document.createElement('i');
+  k.className = 'key' + (keyCls ? ' ' + keyCls : '');
+  const l = document.createElement('span');
+  l.textContent = label;
+  const b = document.createElement('b');
+  b.innerHTML = valueHTML;
+  span.append(k, l, b);
+  return span;
+}
+
+function updateReadout() {
+  const m = model;
+  if (!m) return;
+  const last = m.times.length - 1;
+  const i = hoverIdx == null ? last : Math.min(hoverIdx, last);
+  const t = m.times[i];
+  const yrs = (t - m.times[0]) / YEAR;
+  roDate.textContent = fmtDate(t) + (hoverIdx == null ? '' : i === 0 ? ' · start' : ' · year ' + yrs.toFixed(1));
+  const items = [];
+  let v;
+  if (m.mode === 'wl') {
+    const q = m.mc.q;
+    v = q[2][i];
+    roLabel.textContent = 'Median bankroll';
+    if (state.show.fan) items.push(roItem('fan', 'Middle 80%', moneyHTML(q[0][i]) + ' – ' + moneyHTML(q[4][i])));
+    if (state.show.run) items.push(roItem('run', 'One run', moneyHTML(m.runW[i])));
+    if (state.show.ev) items.push(roItem('ev', 'Mean', moneyHTML(m.ev[i])));
+  } else {
+    v = m.det[i];
+    roLabel.textContent = 'Bankroll';
+    const sp = document.createElement('span');
+    sp.className = 'ro-item';
+    sp.textContent = 'Every trade returns ' + signedPct(m.p.avg);
+    items.push(sp);
+  }
+  roHero.innerHTML = moneyHTML(v);
+  const d = v - m.L0;
+  roMult.innerHTML = growthHTML(d);
+  roMult.className = 'mult ' + tone(d);
+  roMult.hidden = i === 0;
+  roSeries.replaceChildren(...items);
+}
+
+// ---------- stats ----------
+const tilesEl = document.getElementById('tiles');
+function makeTile(labelHTML, valueHTML, sub, toneCls) {
+  const d = document.createElement('div');
+  d.className = 'tile';
+  const l = document.createElement('div');
+  l.className = 'tile-label';
+  l.innerHTML = labelHTML;
+  const v = document.createElement('div');
+  v.className = 'tile-value' + (toneCls ? ' ' + toneCls : '');
+  v.innerHTML = valueHTML;
+  const s = document.createElement('div');
+  s.className = 'tile-sub';
+  s.innerHTML = sub;
+  d.append(l, v, s);
+  return d;
+}
+
+function updateStats() {
+  const m = model, p = m.p, last = m.times.length - 1;
+  const years = (m.cal.end - m.cal.start) / YEAR;
+  const tiles = [];
+  if (m.mode === 'wl') {
+    const { mu, kelly, breakeven } = m.math;
+    const P = m.P;
+    const medEnd = m.mc.q[2][last];
+    const yearly = medEnd === -Infinity ? -Infinity : (medEnd - m.L0) / years;
+    const L0n = Math.log(p.B0);
+    let below = 0, dd50 = 0;
+    for (let i = 0; i < P; i++) {
+      if (m.mc.endL[i] < L0n - 1e-9) below++;
+      if (m.mc.dd[i] >= Math.LN2 - 1e-12) dd50++;
+    }
+    const ddSorted = Float64Array.from(m.mc.dd).sort();
+    const medDD = 1 - Math.exp(-ddSorted[Math.floor((P - 1) / 2)]);
+
+    tiles.push(makeTile('Edge per trade', signedPct(mu), 'on the position, ' + signedPct(p.f * mu) + ' of bankroll', tone(mu)));
+    tiles.push(makeTile('Break-even win rate', Number.isNaN(breakeven) ? '—' : pctStr(breakeven), 'you win ' + pctStr(p.W)));
+    let kv, ks;
+    if (!(mu > 0) || !(kelly > 0)) { kv = '0%'; ks = 'no edge, so Kelly says sit out'; }
+    else if (!Number.isFinite(kelly) || kelly >= 1) { kv = '100%+'; ks = 'Kelly wants it all; you risk ' + pctStr(p.f); }
+    else { kv = pctStr(kelly); ks = 'you risk ' + pctStr(p.f) + ', ' + ratioStr(p.f / kelly) + '× Kelly'; }
+    tiles.push(makeTile('Kelly size', kv, ks));
+    tiles.push(makeTile('Typical growth per year', yearly === -Infinity ? MINUS + '100%' : growthHTML(yearly), 'median run, compounded', tone(yearly)));
+    tiles.push(makeTile('Mean of all runs', moneyHTML(m.ev[last]), 'a few huge runs pull it above the median'));
+    tiles.push(makeTile('Ending below ' + moneyHTML(m.L0), probText(below, P), 'chance after ' + fmtInt(m.cal.total) + ' trades'));
+    tiles.push(makeTile('Typical worst drawdown', medDD > 0 ? MINUS + pctStr(medDD) : '0%', probText(dd50, P) + ' of runs drop 50%+ from a peak', medDD > 0 ? 'loss' : ''));
+    tiles.push(makeTile('Longest losing streak', fmtInt(m.run.longest) + ' in a row', 'in the run shown'));
+  } else {
+    const r = p.f * p.avg;
+    const endL = m.det[last];
+    const yearly = endL === -Infinity ? -Infinity : (endL - m.L0) / years;
+    const perDay = r <= -1 ? -1 : Math.pow(1 + r, p.tradesPerDay) - 1;
+    const perDayL = r <= -1 ? -Infinity : p.tradesPerDay * Math.log10(1 + r);
+    tiles.push(makeTile('Edge per trade', signedPct(p.avg), signedPct(r) + ' of bankroll each trade', tone(p.avg)));
+    tiles.push(makeTile('Growth per year', yearly === -Infinity ? MINUS + '100%' : growthHTML(yearly), Number.isFinite(p.cap) ? 'average over 20 years, cap included' : 'compounded', tone(yearly)));
+    tiles.push(makeTile('Per trading day', perDayL > 0.3 ? growthHTML(perDayL) : signedPct(perDay), fmtTrades(p.tradesPerDay) + (p.tradesPerDay === 1 ? ' trade' : ' trades') + ' a day' + (Number.isFinite(p.cap) ? ', before the cap' : ''), tone(perDay)));
+    tiles.push(makeTile('Trades in 20 years', fmtInt(m.cal.total), fmtInt(m.cal.nDays) + ' trading days'));
+  }
+  tilesEl.replaceChildren(...tiles);
+}
+
+// ---------- ticket notes ----------
+const $ = id => document.getElementById(id);
+const WARN_ICON = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.6 15 14.2H1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.2v3.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="11.9" r="0.95" fill="currentColor"/></svg>';
+
+function setNote(el, kind, text) {
+  if (!kind) { el.hidden = true; el.textContent = ''; return; }
+  el.hidden = false;
+  el.className = 'note ' + kind;
+  el.innerHTML = WARN_ICON;
+  const sp = document.createElement('span');
+  sp.textContent = text;
+  el.append(sp);
+}
+
+function updateTicket() {
+  const m = model, p = m.p, cal = m.cal;
+  const firstTrade = m.L0 + Math.log10(p.f);
+  const capL = Number.isFinite(p.cap) ? Math.log10(p.cap) : Infinity;
+  $('sizeCalc').innerHTML = '<b>' + moneyHTML(Math.min(firstTrade, capL)) + '</b> on the first trade';
+  $('schedCalc').innerHTML = '≈' + fmtInt(cal.daysPerYear) + ' trading days a year · <b>' + fmtInt(cal.total) + '</b> trades by ' + fmtMonth(cal.end);
+  $('dekEnd').textContent = fmtMonth(cal.end);
+
+  const sizeNote = $('sizeNote');
+  const edge = $('edgeCalc');
+  if (m.mode === 'wl') {
+    const { mu, g, kelly, breakeven } = m.math;
+    if (p.W < 1 && p.f * p.b >= 1) setNote(sizeNote, 'crit', 'At this size, one average loss wipes out the whole account.');
+    else if (mu > 0 && g < 0) setNote(sizeNote, 'crit', 'Each trade has an edge, but at this size the typical run still shrinks. Kelly size is ' + pctStr(kelly) + '.');
+    else if (mu > 0 && Number.isFinite(kelly) && kelly < 1 && p.f > kelly) setNote(sizeNote, 'warn', 'Above Kelly size (' + pctStr(kelly) + '). Past it, more size means slower typical growth.');
+    else setNote(sizeNote, null);
+    edge.innerHTML = 'Edge <b class="' + tone(mu) + '">' + signedPct(mu) + '</b> per trade on the position' +
+      (Number.isNaN(breakeven) ? '' : ' · break-even win rate <b>' + pctStr(breakeven) + '</b>');
+  } else {
+    if (p.f * p.avg <= -1) setNote(sizeNote, 'crit', 'At this size, every trade wipes out the whole account.');
+    else setNote(sizeNote, null);
+    edge.innerHTML = 'Each trade moves the bankroll <b class="' + tone(p.avg) + '">' + signedPct(p.f * p.avg) + '</b>';
+  }
+
+  // cap
+  $('capState').innerHTML = state.capOn ? moneyHTML(Math.log10(state.cap)) + ' max' : 'Off';
+  $('capFields').classList.toggle('off', !state.capOn);
+  const capCalc = $('capCalc');
+  if (state.capOn) {
+    const series = m.mode === 'wl' ? m.mc.q[2] : m.det;
+    const thr = Math.log10(p.cap) - Math.log10(p.f);
+    let hit = -1;
+    for (let i = 0; i < series.length; i++) if (series[i] >= thr) { hit = i; break; }
+    const who = m.mode === 'wl' ? 'The median run' : 'The bankroll';
+    capCalc.textContent = hit < 0 ? who + ' never grows big enough to reach the cap.' : hit === 0 ? 'Your first trade already hits the cap.' : who + ' reaches the cap around ' + fmtMonth(m.times[hit]) + '.';
+  } else capCalc.textContent = '';
+}
+
+// ---------- table ----------
+function updateTable() {
+  const m = model, table = $('yearTable');
+  const stepM = (m.cal.end - m.cal.start) / YEAR <= 2.01 ? 3 : 12;
+  $('tableSummary').textContent = stepM === 3 ? 'Quarter-by-quarter table' : 'Year-by-year table';
+  const lastIdx = t => {
+    let lo = 0, hi = m.times.length - 1;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (m.times[mid] <= t) lo = mid; else hi = mid - 1; }
+    return lo;
+  };
+  let head, rows = '';
+  if (m.mode === 'wl') {
+    head = '<tr><th scope="col">Date</th><th scope="col">Median</th><th scope="col">Low 10%</th><th scope="col">High 90%</th><th scope="col">One run</th><th scope="col">Mean</th></tr>';
+  } else {
+    head = '<tr><th scope="col">Date</th><th scope="col">Bankroll</th><th scope="col">Trades so far</th></tr>';
+  }
+  for (let k = 1; ; k++) {
+    const t = addMonths(m.times[0], k * stepM);
+    if (t > m.cal.end) break;
+    const i = lastIdx(t);
+    if (m.mode === 'wl') {
+      const q = m.mc.q;
+      rows += '<tr><td>' + fmtMonth(t) + '</td><td>' + moneyHTML(q[2][i]) + '</td><td>' + moneyHTML(q[0][i]) + '</td><td>' + moneyHTML(q[4][i]) +
+        '</td><td>' + moneyHTML(m.runW[i]) + '</td><td>' + moneyHTML(m.ev[i]) + '</td></tr>';
+    } else {
+      let tradesSoFar = 0;
+      for (let c = 0; c < i; c++) tradesSoFar += m.cal.chunkT[c];
+      rows += '<tr><td>' + fmtMonth(t) + '</td><td>' + moneyHTML(m.det[i]) + '</td><td>' + fmtInt(tradesSoFar) + '</td></tr>';
+    }
+  }
+  table.innerHTML = '<thead>' + head + '</thead><tbody>' + rows + '</tbody>';
+}
+
+// ---------- render loop ----------
+function render() {
+  drawChart();
+  updateStats();
+  updateTicket();
+  updateTable();
+  const isWL = state.mode === 'wl';
+  $('noteModel').textContent = isWL
+    ? 'Trades win at random at your win rate. Each win pays the average win and each loss costs the average loss.'
+    : 'In one-average mode every trade returns exactly the average P/L, so there is no luck and no range, just one line.';
+  $('noteRuns').hidden = !isWL;
+}
+// While a value is changing, redraw from a lighter 300-run pass; settle on 1,000 runs once it stops.
+let rafId = 0, rafP = P_FULL, idleTimer = 0;
+function frame(P) {
+  rafP = P;
+  if (rafId) return;
+  rafId = requestAnimationFrame(() => { rafId = 0; compute(rafP); render(); });
+}
+function schedule() {
+  frame(P_QUICK);
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => frame(P_FULL), 200);
+}
+function scheduleFull() {
+  clearTimeout(idleTimer);
+  frame(P_FULL);
+}
+
+// ---------- wiring ----------
+const fields = {}, ranges = {};
+for (const key of Object.keys(SPECS)) { fields[key] = $('f-' + key); ranges[key] = $('r-' + key); }
+
+function paintRange(key) {
+  const r = ranges[key], sp = SPECS[key];
+  const min = +r.min, max = +r.max, val = +r.value;
+  const origin = sp.origin != null ? sp.origin : min;
+  const pa = (Math.min(origin, val) - min) / (max - min) * 100;
+  const pb = (Math.max(origin, val) - min) / (max - min) * 100;
+  r.style.setProperty('--a', pa + '%');
+  r.style.setProperty('--b', pb + '%');
+  if (key === 'avgPL') r.classList.toggle('loss', state.avgPL < 0), r.classList.toggle('gain', state.avgPL > 0);
+  if (key === 'years') $('yearsAffix').textContent = state.years === 1 ? 'year' : 'years';
+}
+function fitInput(el) { el.style.width = Math.max(2.5, el.value.length + 0.4) + 'ch'; }
+function syncRange(key) {
+  const sp = SPECS[key], r = ranges[key];
+  let t = sp.toT(state[key]);
+  if (!Number.isFinite(t)) t = sp.tMin;
+  r.value = String(Math.min(sp.tMax, Math.max(sp.tMin, t)));
+  r.setAttribute('aria-valuetext', valueText(key, state[key]));
+  paintRange(key);
+}
+function syncAll() {
+  for (const key of Object.keys(SPECS)) { fields[key].value = fmtField(key, state[key]); fitInput(fields[key]); syncRange(key); }
+  $('f-weekends').checked = state.skipWeekends;
+  $('f-holidays').checked = state.skipHolidays;
+  $('f-capOn').checked = state.capOn;
+  document.querySelectorAll('.seg button[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode)));
+  $('wlFields').hidden = state.mode !== 'wl';
+  $('avgFields').hidden = state.mode !== 'avg';
+  scaleBtn.setAttribute('aria-pressed', String(state.scale === 'log'));
+  scaleBtn.textContent = state.scale === 'log' ? 'Log' : 'Linear';
+  document.querySelectorAll('.chip[data-series]').forEach(b => b.setAttribute('aria-pressed', String(!!state.show[b.dataset.series])));
+  const isWL = state.mode === 'wl';
+  document.querySelectorAll('.chip[data-series="fan"], .chip[data-series="median"], .chip[data-series="ev"]').forEach(b => { b.hidden = !isWL; });
+  $('runPair').hidden = !isWL;
+}
+
+for (const key of Object.keys(SPECS)) {
+  const sp = SPECS[key], f = fields[key], r = ranges[key];
+  r.addEventListener('input', () => {
+    state[key] = fixValue(key, sp.snap(sp.toV(+r.value)));
+    if (key === 'cap' && !state.capOn) { state.capOn = true; $('f-capOn').checked = true; }
+    f.value = fmtField(key, state[key]);
+    fitInput(f);
+    r.setAttribute('aria-valuetext', valueText(key, state[key]));
+    paintRange(key);
+    schedule();
+  });
+  r.addEventListener('change', saveState);
+  f.addEventListener('input', () => {
+    fitInput(f);
+    const v = parseNum(f.value);
+    if (!Number.isFinite(v)) return;
+    state[key] = fixValue(key, v);
+    if (key === 'cap' && !state.capOn) { state.capOn = true; $('f-capOn').checked = true; }
+    syncRange(key);
+    schedule();
+  });
+  f.addEventListener('change', () => { f.value = fmtField(key, state[key]); fitInput(f); saveState(); });
+  f.addEventListener('focus', () => { f.select(); });
+  f.addEventListener('keydown', e => { if (e.key === 'Enter') f.blur(); });
+}
+
+$('f-weekends').addEventListener('change', e => { state.skipWeekends = e.target.checked; saveState(); scheduleFull(); });
+$('f-holidays').addEventListener('change', e => { state.skipHolidays = e.target.checked; saveState(); scheduleFull(); });
+$('f-capOn').addEventListener('change', e => { state.capOn = e.target.checked; saveState(); scheduleFull(); });
+
+document.querySelectorAll('.seg button[data-mode]').forEach(b => b.addEventListener('click', () => {
+  state.mode = b.dataset.mode;
+  hoverIdx = null;
+  syncAll();
+  saveState();
+  scheduleFull();
+}));
+scaleBtn.addEventListener('click', () => {
+  state.scale = state.scale === 'log' ? 'linear' : 'log';
+  syncAll();
+  saveState();
+  drawChart();
+});
+document.querySelectorAll('.chip[data-series]').forEach(b => b.addEventListener('click', () => {
+  const k = b.dataset.series;
+  state.show[k] = !state.show[k];
+  syncAll();
+  saveState();
+  drawChart();
+}));
+$('rerollBtn').addEventListener('click', () => {
+  state.runSeed = (Math.random() * 4294967296) >>> 0;
+  if (!state.show.run) { state.show.run = true; syncAll(); }
+  saveState();
+  scheduleFull();
+});
+$('resetBtn').addEventListener('click', () => {
+  state = sanitize(null);
+  hoverIdx = null;
+  $('capDetails').open = false;
+  syncAll();
+  saveState();
+  scheduleFull();
+});
+
+// chart pointer + keyboard
+function idxFromEvent(e) {
+  const r = svg.getBoundingClientRect();
+  const px = (e.clientX - r.left) * (geo.W / r.width);
+  const t = geo.t0 + (px - geo.L) / geo.pw * (geo.t1 - geo.t0);
+  return nearestIndex(t);
+}
+svg.addEventListener('pointermove', e => { if (!geo || !model) return; hoverIdx = idxFromEvent(e); renderHover(); });
+svg.addEventListener('pointerdown', e => { if (!geo || !model) return; hoverIdx = idxFromEvent(e); renderHover(); });
+svg.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') { hoverIdx = null; renderHover(); } });
+document.addEventListener('pointerdown', e => {
+  if (hoverIdx != null && e.pointerType !== 'mouse' && !svg.contains(e.target)) { hoverIdx = null; renderHover(); }
+});
+svg.addEventListener('keydown', e => {
+  if (!model) return;
+  const last = model.times.length - 1;
+  let i = hoverIdx == null ? last : hoverIdx;
+  const step = e.shiftKey ? 52 : 4;
+  if (e.key === 'ArrowLeft') i = Math.max(0, i - step);
+  else if (e.key === 'ArrowRight') i = Math.min(last, i + step);
+  else if (e.key === 'Home') i = 0;
+  else if (e.key === 'End') i = last;
+  else if (e.key === 'Escape') { hoverIdx = null; renderHover(); return; }
+  else return;
+  e.preventDefault();
+  hoverIdx = i;
+  renderHover();
+});
+svg.addEventListener('blur', () => { if (hoverIdx != null) { hoverIdx = null; renderHover(); } });
+
+if ('ResizeObserver' in window) {
+  let lastW = 0, lastH = 0;
+  new ResizeObserver(() => {
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    if (w === lastW && h === lastH) return;
+    lastW = w; lastH = h;
+    drawChart();
+  }).observe(wrap);
+} else {
+  window.addEventListener('resize', drawChart);
+}
+
+// first frame
+$('capDetails').open = state.capOn;
+syncAll();
+compute(P_FULL);
+render();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => drawChart());
+})();
+</script>
+</body>
+</html>
