@@ -1,0 +1,5 @@
+# Serve the bankroll simulator folder. This file is used when no base
+# directory is set in Netlify; with base set to bankroll-simulator, Netlify
+# reads bankroll-simulator/netlify.toml instead. Both publish the same folder.
+[build]
+  publish = "bankroll-simulator"

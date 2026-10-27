@@ -7,7 +7,7 @@ It is one static file, `index.html`, with no build step and no dependencies beyo
 ## Deploy on Netlify
 
 1. In Netlify, import the `Playground` repository from GitHub.
-2. Set the base directory to `bankroll-simulator`. Leave the build command empty; the publish directory is already set in `netlify.toml`.
+2. Leave the base directory and build command empty. The `netlify.toml` at the repository root publishes this folder.
 3. Deploy. Every push to `main` redeploys the site.
 
 ## Run locally
